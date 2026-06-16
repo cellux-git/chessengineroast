@@ -109,6 +109,7 @@ def _run_play(config_path: str, tag: str) -> bool:
 
                 record = play_game(w, b, config, game_num, log_file)
                 print(record.pgn, file=pgn_file, end="\n\n")
+                pgn_file.flush()
                 games_written += 1
 
         success = True
