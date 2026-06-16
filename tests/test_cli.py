@@ -53,9 +53,15 @@ class TestCliEngines:
         )
         assert "No engines found" in result.stdout
 
+    def test_engines_does_not_require_tag(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        result = _run(tmp_path, "--engines")
+        assert "mockengine" in result.stdout
+        assert result.returncode == 0
+
 
 class TestCliPlay:
-    def test_play_single_game(self, tmp_path):
+    def test_play_creates_tagged_directory(self, tmp_path):
         _setup_engines_in_dir(tmp_path)
         config_path = tmp_path / "test.toml"
         config_path.write_text("""\
@@ -66,16 +72,12 @@ black = "mockengine2"
 [time]
 base = "10s"
 increment = "1s"
-
-[output]
-raw = "test_output.pgn"
 """)
-        result = _run(tmp_path, "--play", str(config_path))
-        log_files = list(tmp_path.glob("test_output*.log"))
-        assert len(log_files) > 0, f"stdout: {result.stdout}, stderr: {result.stderr}"
-        with open(log_files[0]) as f:
-            content = f.read()
-        assert "[Game 1]" in content
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "test1")
+        series_dir = tmp_path / "series-test1"
+        assert series_dir.is_dir(), f"stdout: {result.stdout}, stderr: {result.stderr}"
+        assert (series_dir / "games.pgn").exists()
+        assert (series_dir / "games.log").exists()
 
     def test_play_produces_pgn(self, tmp_path):
         _setup_engines_in_dir(tmp_path)
@@ -88,13 +90,44 @@ black = "mockengine2"
 [time]
 base = "10s"
 increment = "1s"
-
-[output]
-raw = "results.pgn"
 """)
-        result = _run(tmp_path, "--play", str(config_path))
-        pgn_files = list(tmp_path.glob("results*.pgn"))
-        assert len(pgn_files) > 0, f"No PGN found, stdout: {result.stdout}, stderr: {result.stderr}"
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "results")
+        pgn_path = tmp_path / "series-results" / "games.pgn"
+        assert pgn_path.exists(), f"No PGN found, stdout: {result.stdout}, stderr: {result.stderr}"
+
+    def test_play_aborts_if_directory_exists(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        series_dir = tmp_path / "series-mytag"
+        series_dir.mkdir()
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+""")
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "mytag")
+        assert result.returncode != 0
+        assert "already exists" in result.stderr
+
+    def test_play_missing_tag(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+""")
+        result = _run(tmp_path, "--config", str(config_path), "--play")
+        assert result.returncode != 0
+        assert "--tag" in result.stderr
 
     def test_play_missing_engines(self, tmp_path):
         config_path = tmp_path / "bad.toml"
@@ -107,7 +140,7 @@ black = "nonexistent2"
 base = "10s"
 increment = "1s"
 """)
-        result = _run(tmp_path, "--play", str(config_path))
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "bad")
         assert result.returncode != 0
 
     def test_play_with_options(self, tmp_path):
@@ -122,18 +155,45 @@ black = "mockengine2"
 base = "10s"
 increment = "1s"
 
-[output]
-raw = "results2.pgn"
-
 [engine_options.mockengine]
 Hash = "64"
 """)
-        result = _run(tmp_path, "--play", str(config_path))
-        pgn_files = list(tmp_path.glob("results2*.pgn"))
-        assert len(pgn_files) > 0, f"stdout: {result.stdout}, stderr: {result.stderr}"
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "opts")
+        pgn_path = tmp_path / "series-opts" / "games.pgn"
+        assert pgn_path.exists(), f"stdout: {result.stdout}, stderr: {result.stderr}"
+
+    def test_log_file_path_printed(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+""")
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "logtest")
+        assert "Log:" in (result.stdout + result.stderr)
 
 
 class TestCliAnalyze:
+    def test_analyze_missing_tag(self, tmp_path):
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+""")
+        result = _run(tmp_path, "--config", str(config_path), "--analyze")
+        assert result.returncode != 0
+        assert "--tag" in result.stderr
+
     def test_analyze_missing_analysis_section(self, tmp_path):
         config_path = tmp_path / "test.toml"
         config_path.write_text("""\
@@ -144,11 +204,8 @@ black = "mockengine2"
 [time]
 base = "10s"
 increment = "1s"
-
-[output]
-raw = "results3.pgn"
 """)
-        result = _run(tmp_path, "--analyze", str(config_path))
+        result = _run(tmp_path, "--config", str(config_path), "--analyze", "--tag", "test")
         assert result.returncode != 0
 
     def test_analyze(self, tmp_path):
@@ -166,20 +223,131 @@ increment = "1s"
 [matches]
 games = 1
 
-[output]
-raw = "analyze_test.pgn"
-analyzed = "analyze_test_annotated.pgn"
-blunders = "analyze_test_blunders.csv"
+[analysis]
+track_blunders_for = "mockengine"
+engine = "mockengine2"
+time_per_move = "1s"
+""")
+        # First play to create the PGN
+        play_result = _run(tmp_path, "--config", str(config_path), "--play", "--tag", "analyze-test")
+
+        pgn_path = tmp_path / "series-analyze-test" / "games.pgn"
+        assert pgn_path.exists(), f"No PGN found, stdout: {play_result.stdout}, stderr: {play_result.stderr}"
+
+        analyze_result = _run(tmp_path, "--config", str(config_path), "--analyze", "--tag", "analyze-test")
+        assert "Analysis complete" in analyze_result.stdout, f"stdout: {analyze_result.stdout}, stderr: {analyze_result.stderr}"
+        assert "Log:" in analyze_result.stdout
+
+        csv_path = tmp_path / "series-analyze-test" / "blunders.csv"
+        assert csv_path.exists()
+
+        analyzed_pgn_path = tmp_path / "series-analyze-test" / "games-analyzed.pgn"
+        assert analyzed_pgn_path.exists()
+
+    def test_analyze_aborts_if_blunders_exists(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+
+[matches]
+games = 1
 
 [analysis]
 track_blunders_for = "mockengine"
 engine = "mockengine2"
 time_per_move = "1s"
 """)
-        play_result = _run(tmp_path, "--play", str(config_path))
+        series_dir = tmp_path / "series-blundercheck"
+        series_dir.mkdir()
+        (series_dir / "games.pgn").touch()
+        (series_dir / "blunders.csv").touch()
 
-        pgn_files = list(tmp_path.glob("analyze_test*.pgn"))
-        assert len(pgn_files) > 0, f"No PGN found, stdout: {play_result.stdout}, stderr: {play_result.stderr}"
+        result = _run(tmp_path, "--config", str(config_path), "--analyze", "--tag", "blundercheck")
+        assert result.returncode != 0
+        assert "blunders CSV already exists" in result.stderr
 
-        analyze_result = _run(tmp_path, "--analyze", str(config_path))
-        assert "Analysis complete" in analyze_result.stdout
+    def test_analyze_pgn_not_found(self, tmp_path):
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+
+[analysis]
+track_blunders_for = "mockengine"
+engine = "mockengine2"
+time_per_move = "1s"
+""")
+        result = _run(tmp_path, "--config", str(config_path), "--analyze", "--tag", "nonexistent")
+        assert result.returncode != 0
+        assert "PGN file not found" in result.stderr
+
+
+class TestCliCombined:
+    def test_play_and_analyze_together(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+
+[matches]
+games = 1
+
+[analysis]
+track_blunders_for = "mockengine"
+engine = "mockengine2"
+time_per_move = "1s"
+""")
+        result = _run(tmp_path, "--config", str(config_path), "--play", "--analyze", "--tag", "combined")
+
+        series_dir = tmp_path / "series-combined"
+        assert (series_dir / "games.pgn").exists(), f"stdout: {result.stdout}, stderr: {result.stderr}"
+        assert (series_dir / "games.log").exists()
+        assert (series_dir / "games-analyzed.pgn").exists(), f"stdout: {result.stdout}, stderr: {result.stderr}"
+        assert (series_dir / "blunders.csv").exists()
+
+    def test_static_filenames_no_timestamps(self, tmp_path):
+        _setup_engines_in_dir(tmp_path)
+        config_path = tmp_path / "test.toml"
+        config_path.write_text("""\
+[engines]
+white = "mockengine"
+black = "mockengine2"
+
+[time]
+base = "10s"
+increment = "1s"
+
+[matches]
+games = 1
+
+[analysis]
+track_blunders_for = "mockengine"
+engine = "mockengine2"
+time_per_move = "1s"
+""")
+        _run(tmp_path, "--config", str(config_path), "--play", "--analyze", "--tag", "staticnames")
+
+        series_dir = tmp_path / "series-staticnames"
+        files = sorted([f.name for f in series_dir.iterdir()])
+        assert "games.pgn" in files
+        assert "games.log" in files
+        assert "games-analyzed.pgn" in files
+        assert "blunders.csv" in files

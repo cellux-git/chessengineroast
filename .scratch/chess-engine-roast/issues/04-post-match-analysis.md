@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: completed
 
 # Post-match analysis + blunder detection
 

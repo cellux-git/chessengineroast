@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import os
 from pathlib import Path
 
 import chess
@@ -29,7 +28,8 @@ def _parse_time_per_move(raw: str) -> int:
         return 1000
 
 
-def analyze_series(config: SeriesConfig, pgn_path: str, log_file: str) -> None:
+def analyze_series(config: SeriesConfig, pgn_path: str, log_file: str,
+                   blunders_csv_path: str, analyzed_pgn_path: str) -> None:
     if not config.has_analysis():
         raise ValueError("analysis section missing engine and time_per_move in config")
 
@@ -41,21 +41,15 @@ def analyze_series(config: SeriesConfig, pgn_path: str, log_file: str) -> None:
     )
     analysis_engine.start()
 
-    csv_file = None
-    csv_writer = None
-    if config.output_blunders:
-        from datetime import datetime
-        csv_path = Path(config.output_blunders)
-        csv_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        csv_output = csv_path.parent / f"{csv_path.stem}-{csv_timestamp}{csv_path.suffix}"
-        csv_output.parent.mkdir(parents=True, exist_ok=True)
-        csv_file = open(csv_output, "w", newline="")
-        csv_writer = csv.DictWriter(
-            csv_file,
-            fieldnames=["fen", "blunder_move", "eval_before", "eval_after", "eval_delta"],
-        )
-        csv_writer.writeheader()
-        csv_file.flush()
+    csv_path = Path(blunders_csv_path)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_file = open(csv_path, "w", newline="")
+    csv_writer = csv.DictWriter(
+        csv_file,
+        fieldnames=["fen", "blunder_move", "eval_before", "eval_after", "eval_delta"],
+    )
+    csv_writer.writeheader()
+    csv_file.flush()
 
     try:
         book = None
@@ -82,19 +76,17 @@ def analyze_series(config: SeriesConfig, pgn_path: str, log_file: str) -> None:
                 )
                 blunders.extend(blunders_in_game)
                 analyzed_games.append(annotated_game)
-                if csv_file:
-                    csv_file.flush()
+                csv_file.flush()
                 log(f"analysis: game {game_number} analyzed, {len(blunders_in_game)} blunders found", log_file)
 
         if book:
             book.close()
 
     finally:
-        if csv_file:
-            csv_file.close()
+        csv_file.close()
         analysis_engine.stop()
 
-    _write_analyzed_pgn(config, analyzed_games)
+    _write_analyzed_pgn(analyzed_pgn_path, analyzed_games)
 
 
 def _analyze_game(
@@ -265,18 +257,9 @@ def detect_blunder(
     return near_equal and big_swing, score_diff
 
 
-def _write_analyzed_pgn(config: SeriesConfig, games: list[chess.pgn.Game]) -> None:
-    from datetime import datetime
-
-    if not config.output_analyzed:
-        return
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = Path(config.output_analyzed)
-    output_path = path.parent / f"{path.stem}-{timestamp}{path.suffix}"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
+def _write_analyzed_pgn(output_path: str, games: list[chess.pgn.Game]) -> None:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
         for game in games:
             print(game, file=f, end="\n\n")
-
-
-

@@ -9,11 +9,6 @@ increment = "2s"
 [matches]
 games = 20
 
-[output]
-raw = "series/blunderchess-vs-stockfish.pgn"
-analyzed = "series/blunderchess-vs-stockfish-analyzed.pgn"
-blunders = "series/blunderchess-blunders.csv"
-
 [analysis]
 track_blunders_for = "blunderchess"
 engine = "stockfish"
