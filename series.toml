@@ -1,0 +1,32 @@
+[engines]
+white = "blunderchess"
+black = "stockfish"
+
+[time]
+base = "3m"
+increment = "2s"
+
+[matches]
+games = 20
+
+[output]
+raw = "series/blunderchess-vs-stockfish.pgn"
+analyzed = "series/blunderchess-vs-stockfish-analyzed.pgn"
+blunders = "series/blunderchess-blunders.csv"
+
+[analysis]
+track_blunders_for = "blunderchess"
+engine = "stockfish"
+time_per_move = "3s"
+
+[blunder_detection]
+equal_range = 2.0
+blunder_delta = 1.0
+
+[engine_options.blunderchess]
+Hash = 64
+Threads = 4
+
+[engine_options.stockfish]
+Hash = 64
+Threads = 4

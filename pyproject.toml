@@ -1,0 +1,23 @@
+[project]
+name = "chessengineroast"
+version = "0.1.0"
+description = "CLI tool for UCI chess engine matches and blunder analysis"
+requires-python = ">=3.11"
+dependencies = ["chess>=1.10.0"]
+
+[project.scripts]
+chessengineroast = "chessengineroast.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["chessengineroast*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
